@@ -1,0 +1,936 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>车辆单车核算 · 云端同步�?/title>
+    <!-- 使用SSE实时推送（零依赖） -->
+    <style>
+        :root {
+            --primary: #07c160; --primary-dark: #06ad56; --danger: #e74c3c; --warning: #f39c12;
+            --bg: #f5f5f5; --card: #fff; --text: #333; --text-light: #666; --text-lighter: #999;
+            --border: #e5e5e5; --shadow: 0 2px 12px rgba(0,0,0,0.08);
+            --radius: 12px; --radius-sm: 8px;
+            --font-xs: 12px; --font-sm: 13px; --font-md: 15px; --font-lg: 17px; --font-xl: 20px; --font-xxl: 26px;
+            --safe-bottom: env(safe-area-inset-bottom, 16px); --tab-height: 56px; --header-height: 50px;
+            --transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+            background: var(--bg); color: var(--text); line-height: 1.5;
+            -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none;
+            min-height: 100vh; padding-bottom: calc(var(--tab-height) + var(--safe-bottom) + 20px); padding-top: var(--header-height);
+        }
+        .header { position: fixed; top: 0; left: 0; right: 0; z-index: 100; background: var(--primary); color: #fff; height: var(--header-height); display: flex; align-items: center; justify-content: center; font-size: var(--font-lg); font-weight: 600; box-shadow: 0 1px 6px rgba(0,0,0,0.15); }
+        .tab-bar { position: fixed; bottom: 0; left: 0; right: 0; z-index: 100; background: #fff; display: flex; border-top: 1px solid var(--border); padding-bottom: var(--safe-bottom); box-shadow: 0 -2px 10px rgba(0,0,0,0.05); flex-wrap: wrap; }
+        .tab-item { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 6px 2px; cursor: pointer; color: var(--text-lighter); transition: var(--transition); font-size: var(--font-xs); gap: 2px; }
+        .tab-item.active { color: var(--primary); font-weight: 600; }
+        .page { display: none; padding: 12px; animation: fadeIn 0.3s ease; }
+        .page.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        .card { background: var(--card); border-radius: var(--radius); padding: 16px; margin-bottom: 12px; box-shadow: var(--shadow); }
+        .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+        .stat-card { background: var(--card); border-radius: var(--radius); padding: 14px; box-shadow: var(--shadow); text-align: center; cursor: pointer; transition: var(--transition); }
+        .stat-card:active { transform: scale(0.97); }
+        .stat-value { font-size: var(--font-xxl); font-weight: 700; color: var(--primary-dark); }
+        .stat-value.danger { color: var(--danger); } .stat-value.warning { color: var(--warning); }
+        .stat-label { font-size: var(--font-xs); color: var(--text-light); }
+        .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 10px 18px; border-radius: 22px; border: none; font-size: var(--font-md); font-weight: 500; cursor: pointer; transition: var(--transition); white-space: nowrap; background: #fff; color: var(--primary); border: 1.5px solid var(--primary); }
+        .btn-primary { background: var(--primary); color: #fff; box-shadow: 0 3px 10px rgba(7,193,96,0.3); border: none; }
+        .btn-sm { padding: 6px 14px; font-size: var(--font-sm); border-radius: 16px; }
+        .btn-block { width: 100%; justify-content: center; }
+        .btn-outline { background: transparent; color: var(--primary); border: 1.5px solid var(--primary); }
+        .btn-float { position: fixed; bottom: calc(var(--tab-height) + var(--safe-bottom) + 20px); right: 16px; z-index: 90; width: 50px; height: 50px; border-radius: 50%; font-size: 24px; box-shadow: 0 6px 20px rgba(7,193,96,0.4); padding: 0; background: var(--primary); color: #fff; border: none; }
+        .form-group { margin-bottom: 14px; }
+        .form-label { display: block; font-size: var(--font-sm); font-weight: 500; color: var(--text-light); margin-bottom: 5px; }
+        .form-input, .form-select { width: 100%; padding: 11px 14px; border: 1.5px solid var(--border); border-radius: var(--radius-sm); font-size: var(--font-md); background: #fafafa; transition: var(--transition); color: var(--text); outline: none; font-family: inherit; -webkit-appearance: none; }
+        .form-input:focus, .form-select:focus { border-color: var(--primary); background: #fff; box-shadow: 0 0 0 3px rgba(7,193,96,0.08); }
+        .form-row { display: flex; gap: 10px; } .form-row .form-group { flex: 1; }
+        .info-box { background: #eaf7ea; border-radius: 8px; padding: 10px; margin-bottom: 12px; font-size: var(--font-xs); color: var(--text-light); display: flex; flex-wrap: wrap; gap: 6px; }
+        .info-item { background: #fff; border-radius: 4px; padding: 3px 8px; white-space: nowrap; }
+        .list-item { display: flex; align-items: center; padding: 13px 14px; background: #fafafa; border-radius: var(--radius-sm); margin-bottom: 8px; gap: 12px; transition: var(--transition); border: 1px solid transparent; cursor: pointer; }
+        .list-item:active { background: #f0f0f0; }
+        .item-info { flex: 1; min-width: 0; }
+        .item-title { font-weight: 500; font-size: var(--font-md); }
+        .item-sub { font-size: var(--font-xs); color: var(--text-lighter); }
+        .item-amount { font-weight: 600; font-size: var(--font-md); }
+        .item-amount.expense { color: var(--danger); }
+        .item-delete { color: #ccc; padding: 6px; font-size: 18px; cursor: pointer; }
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200; display: flex; align-items: flex-end; justify-content: center; animation: fadeIn 0.25s ease; }
+        .modal-sheet { background: #fff; width: 100%; max-width: 500px; max-height: 85vh; border-radius: 18px 18px 0 0; padding: 8px 16px 24px; overflow-y: auto; animation: slideUp 0.3s ease; }
+        @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        .modal-handle { width: 36px; height: 4px; background: #d0d0d0; border-radius: 2px; margin: 8px auto 14px; }
+        .modal-title { font-size: var(--font-lg); font-weight: 600; text-align: center; margin-bottom: 16px; }
+        .modal-actions { display: flex; gap: 10px; margin-top: 16px; }
+        .modal-actions .btn { flex: 1; border-radius: 22px; padding: 12px; }
+        .filter-bar { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; }
+        .filter-bar .form-select { flex: 1; min-width: 100px; padding: 9px 12px; font-size: var(--font-sm); }
+        .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 0 -4px; padding: 0 4px; }
+        table { width: 100%; border-collapse: collapse; font-size: var(--font-sm); min-width: 700px; }
+        table th, table td { padding: 10px 8px; text-align: center; border-bottom: 1px solid var(--border); white-space: nowrap; }
+        table th { background: #f8faf8; font-weight: 600; color: var(--text-light); font-size: var(--font-xs); position: sticky; top: 0; }
+        .text-green { color: var(--primary-dark); font-weight: 600; } .text-red { color: var(--danger); font-weight: 600; }
+        .empty-state { text-align: center; padding: 40px 20px; color: var(--text-lighter); }
+        .toast { position: fixed; top: 60px; left: 50%; transform: translateX(-50%); z-index: 300; background: #333; color: #fff; padding: 10px 22px; border-radius: 20px; font-size: var(--font-sm); animation: toastIn 0.3s ease; white-space: nowrap; }
+        @keyframes toastIn { from { opacity: 0; transform: translateX(-50%) translateY(-12px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
+        .log-item { font-size: var(--font-sm); padding: 8px 12px; background: #f9f9f9; border-radius: 6px; margin-bottom: 6px; display: flex; align-items: flex-start; gap: 8px; }
+        .log-time { color: var(--text-lighter); white-space: nowrap; }
+        .log-detail { flex: 1; }
+
+        /* 同步状态指示器 */
+        #syncIndicator {
+            position: fixed; top: 52px; right: 10px; z-index: 101;
+            display: flex; align-items: center; gap: 4px;
+            padding: 3px 10px; border-radius: 12px; font-size: 11px;
+            background: #e8f5e9; color: #2e7d32; transition: 0.3s;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+        }
+        #syncIndicator .dot { width: 8px; height: 8px; border-radius: 50%; background: #4caf50; display: inline-block; }
+        #syncIndicator.offline { background: #fff3e0; color: #e65100; }
+        #syncIndicator.offline .dot { background: #ff9800; }
+        #syncIndicator.error { background: #ffebee; color: #c62828; }
+        #syncIndicator.error .dot { background: #e53935; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+        #syncIndicator.loading .dot { animation: pulse 1.5s infinite; }
+    </style>
+</head>
+<body>
+    <div class="header">
+    🚐 车辆单车核算系统
+    <span id="headerRightBtn" style="position:absolute;right:12px;font-size:13px;background:rgba(255,255,255,0.2);padding:4px 10px;border-radius:12px;cursor:pointer;" onclick="toggleDriverMode()">👤 司机</span>
+</div>
+
+    <div id="syncIndicator" class="loading">
+        <span class="dot"></span> 连接�?..
+    </div>
+
+    <div class="page" id="page-driver">
+        <div class="card" style="text-align:center;background:var(--primary);color:#fff;">
+            <div style="font-size:20px;font-weight:700;">👤 司机自助填报</div>
+            <div style="font-size:12px;margin-top:4px;">每个司机填写自己车辆的数据，提交后所有人实时可见</div>
+        </div>
+        <div id="driverSections"></div>
+    </div>    <div class="tab-bar" id="tabBar">
+        <div class="tab-item active" data-page="dashboard"><span>📊</span>概览</div>
+        <div class="tab-item" data-page="mileage"><span>🛣�?/span>里程</div>
+        <div class="tab-item" data-page="fuel"><span>�?/span>加油</div>
+        <div class="tab-item" data-page="repair"><span>🔧</span>费用</div>
+        <div class="tab-item" data-page="violation"><span>🚨</span>违章</div>
+        <div class="tab-item" data-page="report"><span>📋</span>核算</div>
+    </div>
+
+    <div class="page active" id="page-dashboard">
+        <div class="stat-grid">
+            <div class="stat-card"><div class="stat-value" id="statTotalVehicles">0</div><div class="stat-label">管理车辆</div></div>
+            <div class="stat-card"><div class="stat-value" id="statTotalMileage">0</div><div class="stat-label">本月总里�?km)</div></div>
+            <div class="stat-card"><div class="stat-value warning" id="statTotalFuel">¥0</div><div class="stat-label">本月油费</div></div>
+            <div class="stat-card"><div class="stat-value danger" id="statTotalRepair">¥0</div><div class="stat-label">本月费用</div></div>
+        </div>
+        <div class="card"><div class="card-header">最近加�?<span id="badgeFuelCount">0</span></div><div id="recentFuelList"></div></div>
+        <div class="card"><div class="card-header">最近违�?<span id="badgeViolationCount">0</span></div><div id="recentViolationList"></div></div>
+        <div style="text-align:center;margin-top:8px;">
+            <button class="btn btn-sm" onclick="exportAllData()">📥 导出备份</button>
+            <button class="btn btn-sm" onclick="document.getElementById('importFileInput').click()" style="margin-left:6px;">📤 导入数据</button>
+            <button class="btn btn-sm" onclick="openLogModal()" style="margin-left:6px;">📝 操作日志</button>
+            <button class="btn btn-sm" onclick="openPasswordModal()" style="margin-left:6px;">🔑 修改密码</button>
+            <input type="file" id="importFileInput" accept=".json" style="display:none;" onchange="importAllData(this)">
+        </div>
+    </div>
+
+    <div class="page" id="page-mileage">
+        <div class="filter-bar">
+            <select class="form-select" id="mileageVehicleFilter" onchange="renderMileagePage()"><option value="all">全部车辆</option></select>
+            <select class="form-select" id="mileageMonthFilter" onchange="renderMileagePage()"><option value="all">全部月份</option></select>
+        </div>
+        <div id="mileageList"></div>
+        <button class="btn btn-primary btn-block" onclick="openMileageModal()" style="margin-top:8px;">+ 添加里程记录</button>
+    </div>
+
+    <div class="page" id="page-fuel">
+        <div class="filter-bar">
+            <select class="form-select" id="fuelVehicleFilter" onchange="renderFuelPage()"><option value="all">全部车辆</option></select>
+            <select class="form-select" id="fuelMonthFilter" onchange="renderFuelPage()"><option value="all">全部月份</option></select>
+        </div>
+        <div id="fuelList"></div>
+        <button class="btn btn-primary btn-block" onclick="openFuelModal()" style="margin-top:8px;">+ 添加加油记录</button>
+    </div>
+
+    <div class="page" id="page-repair">
+        <div class="filter-bar">
+            <select class="form-select" id="repairVehicleFilter" onchange="renderRepairPage()"><option value="all">全部车辆</option></select>
+            <select class="form-select" id="repairMonthFilter" onchange="renderRepairPage()"><option value="all">全部月份</option></select>
+            <select class="form-select" id="repairTypeFilter" onchange="renderRepairPage()">
+                <option value="all">全部类型</option><option value="维修">维修</option><option value="保养">保养</option><option value="保险">保险</option><option value="年检">年检</option><option value="过路�?>过路�?/option><option value="其他">其他</option>
+            </select>
+        </div>
+        <div id="repairList"></div>
+        <button class="btn btn-primary btn-block" onclick="openRepairModal()" style="margin-top:8px;">+ 添加费用记录</button>
+    </div>
+
+    <div class="page" id="page-violation">
+        <div class="filter-bar">
+            <select class="form-select" id="violationVehicleFilter" onchange="renderViolationPage()"><option value="all">全部车辆</option></select>
+            <select class="form-select" id="violationMonthFilter" onchange="renderViolationPage()"><option value="all">全部月份</option></select>
+        </div>
+        <div id="violationList"></div>
+        <button class="btn btn-primary btn-block" onclick="openViolationModal()" style="margin-top:8px;">+ 添加违章记录</button>
+    </div>
+
+    <div class="page" id="page-report">
+        <div class="filter-bar">
+            <select class="form-select" id="reportVehicleFilter" onchange="renderReport()"><option value="all">全部车辆</option></select>
+            <select class="form-select" id="reportMonthFilter" onchange="renderReport()"><option value="all">全部月份</option></select>
+        </div>
+        <div class="card" id="reportContent"><div class="empty-state">📋 请选择车辆和月份查看报�?/div></div>
+        <div style="margin-top:8px;">
+            <label class="form-label">修正系数（漏报费用可乘以此系数，默认1.0�?/label>
+            <input class="form-input" type="number" id="correctionFactor" value="1.0" step="0.01" onchange="renderReport()">
+        </div>
+        <button class="btn btn-outline btn-block" onclick="exportReportCSV()" style="margin-top:8px;">📥 导出核算报表(CSV)</button>
+    </div>
+
+    <button class="btn btn-float" onclick="openVehicleManageModal()">🚐</button>
+    <div id="modalContainer"></div>
+    <div id="toast" class="toast" style="display:none;"></div>
+
+    <datalist id="repairItemsList">
+        <option value="基础保养"><option value="大保�?><option value="更换机油及滤�?><option value="更换空气滤芯"><option value="更换空调滤芯"><option value="更换刹车�?><option value="更换刹车�?><option value="更换轮胎"><option value="四轮定位"><option value="动平�?><option value="更换火花�?><option value="更换变速箱�?><option value="更换防冻�?><option value="更换电瓶"><option value="空调维修"><option value="电路检�?><option value="钣金修复"><option value="喷漆"><option value="配件更换"><option value="工时�?><option value="拖车�?>
+    </datalist>
+    <datalist id="violationTypeList">
+        <option value="闯红�?><option value="违章停车"><option value="超速行�?><option value="压线"><option value="不按导向车道行驶"><option value="逆行"><option value="违反禁止标线"><option value="违反禁令标志"><option value="未系安全�?><option value="接打电话"><option value="其他">
+    </datalist>
+
+    <script>
+        // ============ 云端同步�?============
+        const API_BASE = window.location.origin;
+        let socket = null;
+        let isOnline = false;
+        let serverData = null;
+
+        const syncIndicator = document.getElementById('syncIndicator');
+        function syncStatus(state, text) {
+            syncIndicator.className = state;
+            syncIndicator.innerHTML = '<span class="dot"></span> ' + text;
+        }
+
+        // 初始化Socket.IO
+        function initSync() {
+            // 使用SSE（浏览器原生EventSource，零依赖�?            try {
+                const evtSource = new EventSource(API_BASE + '/api/sse');
+                evtSource.onmessage = (e) => {
+                    if (e.data === 'connected') { isOnline = true; syncStatus('', '已同�?); return; }
+                    try { const p = JSON.parse(e.data); if (typeof refreshAll === 'function') refreshAll(); }
+                    catch(ex) {}
+                };
+                evtSource.addEventListener('data:update', (e) => {
+                    try { const p = JSON.parse(e.data); if (typeof refreshAll === 'function') refreshAll(); }
+                    catch(ex) {}
+                    console.log('SSE update:', e.data.substring(0,60));
+                });
+                evtSource.onerror = () => { isOnline = false; syncStatus('offline', '离线'); };
+            } catch(e) { console.error('SSE init failed:', e); }
+        }
+
+        // 全量加载服务端数�?        async function loadServerData() {
+            try {
+                const res = await fetch(API_BASE + '/api/init');
+                const result = await res.json();
+                if (result.success) {
+                    serverData = result.data;
+                    isOnline = true;
+                    syncStatus('', '已同�?);
+                    return result.data;
+                }
+            } catch(e) {
+                console.error('服务器加载失�?', e);
+                isOnline = false;
+                syncStatus('offline', '离线模式');
+            }
+            return null;
+        }
+
+        // API包装函数
+        async function apiPost(endpoint, data) {
+            try {
+                const res = await fetch(API_BASE + endpoint, {
+                    method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data)
+                });
+                return await res.json();
+            } catch(e) { return { success: false, message: e.message }; }
+        }
+        async function apiPut(endpoint, data) {
+            try {
+                const res = await fetch(API_BASE + endpoint, {
+                    method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data)
+                });
+                return await res.json();
+            } catch(e) { return { success: false, message: e.message }; }
+        }
+        async function apiDelete(endpoint) {
+            try { const res = await fetch(API_BASE + endpoint, {method: 'DELETE'}); return await res.json(); }
+            catch(e) { return { success: false, message: e.message }; }
+        }
+        async function apiGet(endpoint) {
+            try { const res = await fetch(API_BASE + endpoint); return await res.json(); }
+            catch(e) { return { success: false, message: e.message }; }
+        }
+    </script>
+
+    <script>
+        // ============ 应用主逻辑（基于云端同步） ============
+        (function() {
+            const STORAGE_KEY = 'fleet_cloud_v6';
+            const ADMIN_PASSWORD = '585858';
+
+            const DEPARTMENTS = ['抚州经营网点','南昌经营�?,'景德镇经营部','赣州经营�?,'九江经营网点','福州经营网点','泉州经营网点','厦门经营�?,'漳州经营�?];
+
+            function getDefaultData() {
+                return { vehicles: [], mileageRecords: [], fuelRecords: [], repairRecords: [], violationRecords: [], operationLogs: [], nextId: 500 };
+            }
+
+            let appData = getDefaultData();
+
+            // 从服务器加载数据
+            async function loadDataFromServer() {
+                const d = await loadServerData();
+                if (d) {
+                    appData.vehicles = d.vehicles || [];
+                    appData.mileageRecords = d.mileageRecords || [];
+                    appData.fuelRecords = d.fuelRecords || [];
+                    appData.repairRecords = d.repairRecords || [];
+                    appData.violationRecords = d.violationRecords || [];
+                    appData.operationLogs = d.operationLogs || [];
+                    appData.nextId = d.nextId || 500;
+                    return true;
+                }
+                // 降级：尝试本地存�?                try {
+                    const raw = localStorage.getItem(STORAGE_KEY);
+                    if (raw) { appData = JSON.parse(raw); return true; }
+                } catch(e) {}
+                return false;
+            }
+
+            // 持久化到服务�?            async function persist() {
+                // 服务端已自动通过API保存
+                // 本地做降级缓�?                try { localStorage.setItem(STORAGE_KEY, JSON.stringify(appData)); } catch(e) {}
+            }
+
+            // ===== 工具函数 =====
+            function showToast(msg, d) {
+                d = d || 1800;
+                const t = document.getElementById('toast');
+                t.textContent = msg; t.style.display = 'block';
+                clearTimeout(t._timeout);
+                t._timeout = setTimeout(() => { t.style.display = 'none'; }, d);
+            }
+
+            function formatMoney(v) { return '¥' + Number(v).toFixed(2); }
+            function getMonthLabel(m) { if(!m) return '-'; const [y, mth] = m.split('-'); return y+'�?+parseInt(mth)+'�?; }
+            function getCurrentMonth() { const n = new Date(); return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0'); }
+            function getVehicleById(id) { return appData.vehicles.find(v => v.id === id); }
+            function getVehicleLabel(id) { const v = getVehicleById(id); return v ? v.plateNumber + (v.driver ? ' ('+v.driver+')' : '') : '未知'; }
+            function vehicleOptions(selectedId) {
+                return appData.vehicles.map(v => `<option value="${v.id}" ${v.id===selectedId?'selected':''}>${v.plateNumber} (${v.driver||'无司�?})</option>`).join('');
+            }
+
+            // ===== 密码验证（云端） =====
+            async function checkAdminPassword(action) {
+                const pwd = prompt('请输入管理员密码�? + action);
+                if (pwd === null) return false;
+                const result = await apiPost('/api/verify-password', { password: pwd });
+                if (result.success) return true;
+                showToast('密码错误');
+                return false;
+            }
+
+            // ===== 操作日志 =====
+            async function addOperationLog(vehicleId, action, details) {
+                const vehicle = getVehicleById(vehicleId);
+                // 服务端会自动记录，这里只刷新
+                await persist();
+            }
+
+            // ===== 弹窗 =====
+            function openModal(title, contentHtml, onSave) {
+                const container = document.getElementById('modalContainer');
+                const html = `
+                <div class="modal-overlay" id="modalOverlay">
+                    <div class="modal-sheet" id="modalSheet">
+                        <div class="modal-handle"></div>
+                        <div class="modal-title">${title}</div>
+                        <div id="modalBody">${contentHtml}</div>
+                        <div class="modal-actions">
+                            <button class="btn" id="modalCancel">取消</button>
+                            <button class="btn btn-primary" id="modalSave">保存</button>
+                        </div>
+                    </div>
+                </div>`;
+                container.innerHTML = html;
+                const overlay = document.getElementById('modalOverlay');
+                const sheet = document.getElementById('modalSheet');
+                document.getElementById('modalCancel').onclick = close;
+                document.getElementById('modalSave').onclick = function() {
+                    const res = onSave ? onSave(close) : null;
+                    if (res !== false) close();
+                };
+                overlay.onclick = function(e) { if (e.target === overlay) close(); };
+                function close() {
+                    overlay.style.opacity = '0';
+                    sheet.style.transform = 'translateY(100%)';
+                    setTimeout(() => { container.innerHTML = ''; }, 250);
+                }
+            }
+
+            // ===== 操作日志弹窗 =====
+            window.openLogModal = async function() {
+                const logs = appData.operationLogs || [];
+                let html = '<div class="filter-bar"><select class="form-select" id="logVehicleFilter" onchange="filterLogs()"><option value="all">全部车辆</option>' + vehicleOptions() + '</select></div><div id="logListContainer">';
+                logs.forEach(log => {
+                    html += `<div class="log-item"><span class="log-time">${log.time}</span><div class="log-detail"><strong>${log.vehiclePlate}</strong> - ${log.action} - ${log.details}</div></div>`;
+                });
+                html += '</div>';
+                openModal('操作日志', html || '<div class="empty-state">暂无操作记录</div>');
+            };
+
+            // ===== 修改密码弹窗 =====
+            window.openPasswordModal = function() {
+                const html = `
+                    <div class="form-group"><label class="form-label">原密�?/label><input class="form-input" type="password" id="pOld"></div>
+                    <div class="form-group"><label class="form-label">新密�?/label><input class="form-input" type="password" id="pNew"></div>
+                    <div class="form-group"><label class="form-label">确认新密�?/label><input class="form-input" type="password" id="pConfirm"></div>`;
+                openModal('修改密码', html, async function(close) {
+                    const old = document.getElementById('pOld').value;
+                    const nw = document.getElementById('pNew').value;
+                    const cf = document.getElementById('pConfirm').value;
+                    if (!old || !nw) { showToast('请填写完�?); return false; }
+                    if (nw !== cf) { showToast('两次密码不一�?); return false; }
+                    if (nw.length < 4) { showToast('密码至少4�?); return false; }
+                    const res = await apiPut('/api/password', { oldPwd: old, newPwd: nw });
+                    if (res.success) { showToast('密码已修�?); close(); }
+                    else { showToast(res.message); return false; }
+                });
+            };
+
+            // ===== 车辆管理 =====
+            window.openVehicleManageModal = function() {
+                let listHtml = appData.vehicles.map(v => `
+                    <div class="list-item">
+                        <span style="font-size:28px;">🚐</span>
+                        <div class="item-info">
+                            <div class="item-title">${v.plateNumber} · ${v.brandModel||''} · 司机:${v.driver||'-'}</div>
+                            <div class="item-sub">${v.department||''} · 保险:${v.insuranceExpiry||'-'} · 年审:${v.annualInspection||'-'}</div>
+                        </div>
+                        <span class="item-delete" onclick="deleteVehicle(${v.id})">🗑�?/span>
+                    </div>`).join('') || '<div class="empty-state">暂无车辆</div>';
+                const deptOpts = DEPARTMENTS.map(d => `<option value="${d}">${d}</option>`).join('');
+                const formHtml = `
+                    <div style="border-top:1px solid #eee;margin-top:10px;padding-top:12px;">
+                        <div class="form-row"><div class="form-group"><label class="form-label">车牌�?*</label><input class="form-input" id="vPlate"></div><div class="form-group"><label class="form-label">品牌型号</label><input class="form-input" id="vBrandModel"></div></div>
+                        <div class="form-row"><div class="form-group"><label class="form-label">发动机号</label><input class="form-input" id="vEngine"></div><div class="form-group"><label class="form-label">VIN</label><input class="form-input" id="vVin"></div></div>
+                        <div class="form-row"><div class="form-group"><label class="form-label">当前里程(km)</label><input class="form-input" type="number" id="vMileage"></div><div class="form-group"><label class="form-label">使用单位</label><select class="form-select" id="vDept">${deptOpts}</select></div></div>
+                        <div class="form-row"><div class="form-group"><label class="form-label">司机姓名 *</label><input class="form-input" id="vDriver"></div><div class="form-group"><label class="form-label">保险到期</label><input class="form-input" type="date" id="vInsurance"></div></div>
+                        <div class="form-row"><div class="form-group"><label class="form-label">年审到期</label><input class="form-input" type="date" id="vAnnual"></div><div class="form-group"><label class="form-label">排量(L)</label><input class="form-input" id="vDisplacement"></div></div>
+                    </div>`;
+                openModal('车辆管理', listHtml + formHtml, async function(close) {
+                    const plate = document.getElementById('vPlate').value.trim();
+                    const driver = document.getElementById('vDriver').value.trim();
+                    if (!plate || !driver) { showToast('车牌号和司机必填'); return false; }
+                    const res = await apiPost('/api/vehicles', {
+                        plateNumber: plate, brandModel: document.getElementById('vBrandModel').value.trim(),
+                        engineNumber: document.getElementById('vEngine').value.trim(),
+                        vin: document.getElementById('vVin').value.trim(),
+                        currentMileage: parseFloat(document.getElementById('vMileage').value) || 0,
+                        department: document.getElementById('vDept').value,
+                        driver: driver,
+                        insuranceExpiry: document.getElementById('vInsurance').value,
+                        annualInspection: document.getElementById('vAnnual').value,
+                        displacement: document.getElementById('vDisplacement').value.trim()
+                    });
+                    if (res.success) { showToast('车辆已添�?); await loadDataFromServer(); refreshAll(); close(); }
+                    else { showToast(res.message); return false; }
+                });
+                // 绑定删除事件
+                window.deleteVehicle = async function(id) {
+                    if (!await checkAdminPassword('删除车辆')) return;
+                    if (!confirm('确定删除此车辆？')) return;
+                    await apiDelete('/api/vehicles/' + id);
+                    await loadDataFromServer();
+                    refreshAll();
+                    showToast('已删�?);
+                };
+            };
+
+            // ===== 里程 =====
+            window.openMileageModal = function(editRecord) {
+                const isEdit = !!editRecord;
+                const html = `
+                    <div class="form-group"><label class="form-label">车辆</label><select class="form-select" id="mVehicle">${vehicleOptions(editRecord?.vehicleId||'')}</select></div>
+                    <div class="form-group"><label class="form-label">月份</label><input class="form-input" type="month" id="mMonth" value="${editRecord?editRecord.month:getCurrentMonth()}"></div>
+                    <div class="form-row"><div class="form-group"><label class="form-label">月初里程</label><input class="form-input" type="number" id="mStart" value="${editRecord?editRecord.startMileage:''}" step="0.1"></div>
+                    <div class="form-group"><label class="form-label">月末里程</label><input class="form-input" type="number" id="mEnd" value="${editRecord?editRecord.endMileage:''}" step="0.1"></div></div>`;
+                openModal(isEdit?'编辑里程':'添加里程', html, async function(close) {
+                    const v = parseInt(document.getElementById('mVehicle').value);
+                    const month = document.getElementById('mMonth').value;
+                    const s = parseFloat(document.getElementById('mStart').value);
+                    const e = parseFloat(document.getElementById('mEnd').value);
+                    if (!v || !month || isNaN(s) || isNaN(e)) { showToast('请填写完�?); return false; }
+                    if (e < s) { showToast('月末里程不能小于月初'); return false; }
+                    if (isEdit) {
+                        await apiPut('/api/mileage_records/' + editRecord.id, { vehicleId:v, month, startMileage:s, endMileage:e });
+                    } else {
+                        await apiPost('/api/mileage_records', { vehicleId:v, month, startMileage:s, endMileage:e });
+                    }
+                    await loadDataFromServer(); refreshAll(); showToast('已保�?); close();
+                });
+            };
+
+            // ===== 加油 =====
+            window.openFuelModal = function(editRecord) {
+                const isEdit = !!editRecord;
+                const defDate = editRecord ? editRecord.date : new Date().toISOString().split('T')[0];
+                const html = `
+                    <div class="form-group"><label class="form-label">车辆</label><select class="form-select" id="fVehicle">${vehicleOptions(editRecord?.vehicleId||'')}</select></div>
+                    <div class="form-group"><label class="form-label">日期</label><input class="form-input" type="date" id="fDate" value="${defDate}"></div>
+                    <div class="form-row"><div class="form-group"><label class="form-label">数量(�?</label><input class="form-input" type="number" id="fLiters" value="${editRecord?editRecord.liters:''}" step="0.01"></div>
+                    <div class="form-group"><label class="form-label">单价(�?�?</label><input class="form-input" type="number" id="fPrice" value="${editRecord?editRecord.unitPrice:''}" step="0.01"></div></div>
+                    <div class="form-group"><label class="form-label">金额(�?</label><input class="form-input" type="number" id="fAmount" value="${editRecord?editRecord.amount:''}" step="0.01"></div>
+                    <div class="form-group"><label class="form-label">备注</label><input class="form-input" id="fNote" value="${editRecord?editRecord.note||'':''}"></div>`;
+                openModal(isEdit?'编辑加油':'添加加油', html, async function(close) {
+                    const v = parseInt(document.getElementById('fVehicle').value);
+                    const date = document.getElementById('fDate').value;
+                    const liters = parseFloat(document.getElementById('fLiters').value);
+                    const up = parseFloat(document.getElementById('fPrice').value) || 0;
+                    let amt = parseFloat(document.getElementById('fAmount').value);
+                    if (!v || !date || isNaN(liters) || liters<=0) { showToast('请填写完�?); return false; }
+                    if (isNaN(amt) || amt<=0) { if(up>0) amt=liters*up; else { showToast('请填写金�?); return false; } }
+                    const note = document.getElementById('fNote').value.trim();
+                    if (isEdit) { await apiPut('/api/fuel_records/'+editRecord.id, { vehicleId:v, date, liters, unitPrice:up, amount:amt, note }); }
+                    else { await apiPost('/api/fuel_records', { vehicleId:v, date, liters, unitPrice:up, amount:amt, note }); }
+                    await loadDataFromServer(); refreshAll(); showToast('已保�?); close();
+                });
+                // 自动计算
+                setTimeout(() => {
+                    const l = document.getElementById('fLiters');
+                    const p = document.getElementById('fPrice');
+                    const a = document.getElementById('fAmount');
+                    function calc() { const lv=parseFloat(l.value)||0, pv=parseFloat(p.value)||0; if(lv>0&&pv>0) a.value=(lv*pv).toFixed(2); }
+                    l.oninput=calc; p.oninput=calc;
+                }, 100);
+            };
+
+            // ===== 费用 =====
+            window.openRepairModal = function(editRecord) {
+                const isEdit = !!editRecord;
+                const defDate = editRecord ? editRecord.date : new Date().toISOString().split('T')[0];
+                const types = ['维修','保养','保险','年检','过路�?,'其他'];
+                const typeOpts = types.map(t => `<option value="${t}" ${editRecord&&editRecord.expenseType===t?'selected':''}>${t}</option>`).join('');
+                const html = `
+                    <div class="form-group"><label class="form-label">车辆</label><select class="form-select" id="rVehicle">${vehicleOptions(editRecord?.vehicleId||'')}</select></div>
+                    <div class="form-group"><label class="form-label">日期</label><input class="form-input" type="date" id="rDate" value="${defDate}"></div>
+                    <div class="form-row"><div class="form-group"><label class="form-label">类型</label><select class="form-select" id="rType">${typeOpts}</select></div>
+                    <div class="form-group"><label class="form-label">金额(�?</label><input class="form-input" type="number" id="rAmount" value="${editRecord?editRecord.amount:''}" step="0.01"></div></div>
+                    <div class="form-group"><label class="form-label">项目</label><input class="form-input" id="rProject" list="repairItemsList" value="${editRecord?editRecord.project||'':''}"></div>
+                    <div class="form-group"><label class="form-label">备注</label><input class="form-input" id="rNote" value="${editRecord?editRecord.note||'':''}"></div>`;
+                openModal(isEdit?'编辑费用':'添加费用', html, async function(close) {
+                    const v = parseInt(document.getElementById('rVehicle').value);
+                    const date = document.getElementById('rDate').value;
+                    const type = document.getElementById('rType').value;
+                    const amt = parseFloat(document.getElementById('rAmount').value);
+                    const proj = document.getElementById('rProject').value.trim();
+                    const note = document.getElementById('rNote').value.trim();
+                    if (!v||!date||!type||isNaN(amt)||amt<=0) { showToast('请填写完�?); return false; }
+                    if (isEdit) { await apiPut('/api/repair_records/'+editRecord.id, { vehicleId:v, date, expenseType:type, amount:amt, project:proj, note }); }
+                    else { await apiPost('/api/repair_records', { vehicleId:v, date, expenseType:type, amount:amt, project:proj, note }); }
+                    await loadDataFromServer(); refreshAll(); showToast('已保�?); close();
+                });
+            };
+
+            // ===== 违章 =====
+            window.openViolationModal = function(editRecord) {
+                const isEdit = !!editRecord;
+                const defDate = editRecord ? editRecord.date : new Date().toISOString().split('T')[0];
+                const html = `
+                    <div class="form-group"><label class="form-label">车辆</label><select class="form-select" id="vVehicle">${vehicleOptions(editRecord?.vehicleId||'')}</select></div>
+                    <div class="form-group"><label class="form-label">日期</label><input class="form-input" type="date" id="vDate" value="${defDate}"></div>
+                    <div class="form-row"><div class="form-group"><label class="form-label">类别</label><input class="form-input" id="vType" list="violationTypeList" value="${editRecord?editRecord.type||'':''}"></div>
+                    <div class="form-group"><label class="form-label">扣分</label><input class="form-input" type="number" id="vPoints" value="${editRecord?editRecord.points||0:0}"></div></div>
+                    <div class="form-row"><div class="form-group"><label class="form-label">罚款(�?</label><input class="form-input" type="number" id="vFine" value="${editRecord?editRecord.fine||'':''}" step="0.01"></div>
+                    <div class="form-group"><label class="form-label">状�?/label><select class="form-select" id="vStatus"><option value="未处�? ${editRecord&&editRecord.status==='未处�??'selected':''}>未处�?/option><option value="已处�? ${editRecord&&editRecord.status==='已处�??'selected':''}>已处�?/option></select></div></div>
+                    <div class="form-group"><label class="form-label">备注</label><input class="form-input" id="vNote" value="${editRecord?editRecord.note||'':''}"></div>`;
+                openModal(isEdit?'编辑违章':'添加违章', html, async function(close) {
+                    const v = parseInt(document.getElementById('vVehicle').value);
+                    const date = document.getElementById('vDate').value;
+                    const type = document.getElementById('vType').value.trim();
+                    const pts = parseInt(document.getElementById('vPoints').value)||0;
+                    const fine = parseFloat(document.getElementById('vFine').value)||0;
+                    const status = document.getElementById('vStatus').value;
+                    const note = document.getElementById('vNote').value.trim();
+                    if (!v||!date) { showToast('请选择车辆和日�?); return false; }
+                    if (isEdit) { await apiPut('/api/violation_records/'+editRecord.id, { vehicleId:v, date, type, points:pts, fine, status, note }); }
+                    else { await apiPost('/api/violation_records', { vehicleId:v, date, type, points:pts, fine, status, note }); }
+                    await loadDataFromServer(); refreshAll(); showToast('已保�?); close();
+                });
+            };
+
+            // ===== 删除 =====
+            async function handleDelete(type, id) {
+                if (!await checkAdminPassword('删除记录')) return;
+                if (!confirm('确定删除吗？')) return;
+                const tableMap = { 'mileage':'mileage_records', 'fuel':'fuel_records', 'repair':'repair_records', 'violation':'violation_records' };
+                await apiDelete('/api/'+tableMap[type]+'/'+id);
+                await loadDataFromServer(); refreshAll(); showToast('已删�?);
+            }
+
+            // ===== 渲染函数 =====
+            function renderDashboard() {
+                const cm = getCurrentMonth();
+                document.getElementById('statTotalVehicles').textContent = appData.vehicles.length;
+                const mileMonths = appData.mileageRecords.filter(r => r.month === cm);
+                document.getElementById('statTotalMileage').textContent = mileMonths.reduce((s,r) => s + (r.endMileage - r.startMileage), 0).toFixed(1);
+                const fuels = appData.fuelRecords.filter(r => r.date && r.date.startsWith(cm));
+                document.getElementById('statTotalFuel').textContent = formatMoney(fuels.reduce((s,r) => s+r.amount, 0));
+                const repairs = appData.repairRecords.filter(r => r.date && r.date.startsWith(cm));
+                document.getElementById('statTotalRepair').textContent = formatMoney(repairs.reduce((s,r) => s+r.amount, 0));
+                document.getElementById('badgeFuelCount').textContent = appData.fuelRecords.length;
+                document.getElementById('badgeViolationCount').textContent = appData.violationRecords.length;
+
+                const recentFuel = [...appData.fuelRecords].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5);
+                document.getElementById('recentFuelList').innerHTML = recentFuel.length ? recentFuel.map(r => `
+                    <div class="list-item" onclick="openFuelModal({id:${r.id},vehicleId:${r.vehicleId},date:'${r.date}',liters:${r.liters},unitPrice:${r.unitPrice||0},amount:${r.amount},note:'${(r.note||'').replace(/'/g,"\\'")}'})">
+                        <span>�?/span><div class="item-info"><div class="item-title">${getVehicleLabel(r.vehicleId)}</div><div class="item-sub">${r.date} · ${r.liters}�?/div></div><span class="item-amount expense">${formatMoney(r.amount)}</span>
+                    </div>`).join('') : '<div class="empty-state">暂无加油记录</div>';
+
+                const recentViolations = [...appData.violationRecords].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5);
+                document.getElementById('recentViolationList').innerHTML = recentViolations.length ? recentViolations.map(r => `
+                    <div class="list-item">
+                        <span>🚨</span><div class="item-info"><div class="item-title">${getVehicleLabel(r.vehicleId)} · ${r.type||'违章'}</div><div class="item-sub">${r.date} · �?{r.points}�?· 罚款${formatMoney(r.fine)}</div></div>
+                    </div>`).join('') : '<div class="empty-state">暂无违章记录</div>';
+            }
+
+            function filterRecords(records, vehicleIdFilter, monthPrefix) {
+                let r = records;
+                if (vehicleIdFilter !== 'all') r = r.filter(x => x.vehicleId === parseInt(vehicleIdFilter));
+                if (monthPrefix !== 'all') r = r.filter(x => (x.month||(x.date?x.date.substring(0,7):'')).startsWith(monthPrefix));
+                return r;
+            }
+
+            function updateFilters() {
+                const vOpts = '<option value="all">全部车辆</option>' + vehicleOptions();
+                ['mileageVehicleFilter','fuelVehicleFilter','repairVehicleFilter','violationVehicleFilter','reportVehicleFilter'].forEach(id => {
+                    const s = document.getElementById(id); if(!s) return;
+                    const cv = s.value; s.innerHTML = vOpts; if([...s.options].some(o=>o.value===cv)) s.value=cv;
+                });
+                const allMonths = new Set();
+                [...appData.mileageRecords,...appData.fuelRecords,...appData.repairRecords,...appData.violationRecords].forEach(r => {
+                    const m = r.month || (r.date ? r.date.substring(0,7) : null);
+                    if (m) allMonths.add(m);
+                });
+                const sorted = [...allMonths].sort().reverse();
+                const mOpts = '<option value="all">全部月份</option>' + sorted.map(m => `<option value="${m}">${getMonthLabel(m)}</option>`).join('');
+                ['mileageMonthFilter','fuelMonthFilter','repairMonthFilter','violationMonthFilter','reportMonthFilter'].forEach(id => {
+                    const s = document.getElementById(id); if(!s) return;
+                    const cv = s.value; s.innerHTML = mOpts; if([...s.options].some(o=>o.value===cv)) s.value=cv;
+                });
+            }
+
+            function renderMileagePage() {
+                const vf = document.getElementById('mileageVehicleFilter')?.value || 'all';
+                const mf = document.getElementById('mileageMonthFilter')?.value || 'all';
+                let records = filterRecords(appData.mileageRecords, vf, mf).sort((a,b)=>b.month.localeCompare(a.month));
+                const el = document.getElementById('mileageList');
+                el.innerHTML = records.length ? records.map(r => `
+                    <div class="list-item" onclick="openMileageModal({id:${r.id},vehicleId:${r.vehicleId},month:'${r.month}',startMileage:${r.startMileage},endMileage:${r.endMileage}})">
+                        <span>🛣�?/span><div class="item-info"><div class="item-title">${getVehicleLabel(r.vehicleId)} · ${getMonthLabel(r.month)}</div><div class="item-sub">月初:${r.startMileage} �?月末:${r.endMileage}</div></div>
+                        <span class="item-amount text-green">${(r.endMileage-r.startMileage).toFixed(1)} km</span>
+                        <span class="item-delete" onclick="handleDelete('mileage',${r.id})">🗑�?/span>
+                    </div>`).join('') : '<div class="empty-state">暂无记录</div>';
+            }
+
+            function renderFuelPage() {
+                const vf = document.getElementById('fuelVehicleFilter')?.value || 'all';
+                const mf = document.getElementById('fuelMonthFilter')?.value || 'all';
+                let records = filterRecords(appData.fuelRecords, vf, mf).sort((a,b)=>b.date.localeCompare(a.date));
+                document.getElementById('fuelList').innerHTML = records.length ? records.map(r => `
+                    <div class="list-item" onclick="openFuelModal({id:${r.id},vehicleId:${r.vehicleId},date:'${r.date}',liters:${r.liters},unitPrice:${r.unitPrice||0},amount:${r.amount},note:'${(r.note||'').replace(/'/g,"\\'")}'})">
+                        <span>�?/span><div class="item-info"><div class="item-title">${getVehicleLabel(r.vehicleId)} · ${r.liters}�?/div><div class="item-sub">${r.date} · 单价${r.unitPrice||'-'}�?�?/div></div>
+                        <span class="item-amount expense">${formatMoney(r.amount)}</span>
+                        <span class="item-delete" onclick="handleDelete('fuel',${r.id})">🗑�?/span>
+                    </div>`).join('') : '<div class="empty-state">暂无记录</div>';
+            }
+
+            function renderRepairPage() {
+                const vf = document.getElementById('repairVehicleFilter')?.value || 'all';
+                const mf = document.getElementById('repairMonthFilter')?.value || 'all';
+                const tf = document.getElementById('repairTypeFilter')?.value || 'all';
+                let records = filterRecords(appData.repairRecords, vf, mf).sort((a,b)=>b.date.localeCompare(a.date));
+                if (tf !== 'all') records = records.filter(r => r.expenseType === tf);
+                document.getElementById('repairList').innerHTML = records.length ? records.map(r => `
+                    <div class="list-item">
+                        <span>🔧</span><div class="item-info"><div class="item-title">${getVehicleLabel(r.vehicleId)} · ${r.expenseType}</div><div class="item-sub">${r.date} · ${r.project||'未填�?}</div></div>
+                        <span class="item-amount expense">${formatMoney(r.amount)}</span>
+                        <span class="item-delete" onclick="handleDelete('repair',${r.id})">🗑�?/span>
+                    </div>`).join('') : '<div class="empty-state">暂无记录</div>';
+            }
+
+            function renderViolationPage() {
+                const vf = document.getElementById('violationVehicleFilter')?.value || 'all';
+                const mf = document.getElementById('violationMonthFilter')?.value || 'all';
+                let records = filterRecords(appData.violationRecords, vf, mf).sort((a,b)=>b.date.localeCompare(a.date));
+                document.getElementById('violationList').innerHTML = records.length ? records.map(r => `
+                    <div class="list-item">
+                        <span>🚨</span><div class="item-info"><div class="item-title">${getVehicleLabel(r.vehicleId)} · ${r.type||'违章'}</div><div class="item-sub">${r.date} · �?{r.points}�?· 罚款${formatMoney(r.fine)} · ${r.status}</div></div>
+                        <span class="item-delete" onclick="handleDelete('violation',${r.id})">🗑�?/span>
+                    </div>`).join('') : '<div class="empty-state">暂无记录</div>';
+            }
+
+            function renderReport() {
+                const vf = document.getElementById('reportVehicleFilter')?.value || 'all';
+                const mf = document.getElementById('reportMonthFilter')?.value || 'all';
+                const correction = parseFloat(document.getElementById('correctionFactor').value) || 1.0;
+                let vehicles = appData.vehicles;
+                if (vf !== 'all') vehicles = vehicles.filter(v => v.id === parseInt(vf));
+                const monthsSet = new Set();
+                [...appData.mileageRecords,...appData.fuelRecords,...appData.repairRecords,...appData.violationRecords].forEach(r => {
+                    const m = r.month || (r.date ? r.date.substring(0,7) : null);
+                    if (m) monthsSet.add(m);
+                });
+                let months = [...monthsSet].sort();
+                if (mf !== 'all') months = months.filter(m => m === mf);
+                let html = '<div class="table-wrap"><table><thead><tr><th>车辆</th><th>月份</th><th>月初里程</th><th>月末里程</th><th>行驶里程</th><th>油量(L)</th><th>油费</th><th>维修保养</th><th>其他费用</th><th>违章罚款</th><th>总费�?/th><th>百公里油�?/th><th>每公里成�?/th></tr></thead><tbody>';
+                vehicles.forEach(v => {
+                    months.forEach(month => {
+                        const mr = appData.mileageRecords.find(r => r.vehicleId===v.id && r.month===month);
+                        const driven = mr ? (mr.endMileage - mr.startMileage) : 0;
+                        const fuels = appData.fuelRecords.filter(r => r.vehicleId===v.id && r.date?.startsWith(month));
+                        const totalL = fuels.reduce((s,r)=>s+r.liters,0);
+                        const totalF = fuels.reduce((s,r)=>s+r.amount,0);
+                        const repairs = appData.repairRecords.filter(r => r.vehicleId===v.id && r.date?.startsWith(month));
+                        const rc = repairs.filter(r=>r.expenseType==='维修'||r.expenseType==='保养').reduce((s,r)=>s+r.amount,0);
+                        const oc = repairs.filter(r=>r.expenseType!=='维修'&&r.expenseType!=='保养').reduce((s,r)=>s+r.amount,0);
+                        const viols = appData.violationRecords.filter(r => r.vehicleId===v.id && r.date?.startsWith(month));
+                        const vf = viols.reduce((s,r)=>s+r.fine,0);
+                        const tc = (totalF+rc+oc+vf)*correction;
+                        html += `<tr><td>${v.plateNumber}</td><td>${getMonthLabel(month)}</td><td>${mr?mr.startMileage:'-'}</td><td>${mr?mr.endMileage:'-'}</td><td class="text-green">${mr?driven.toFixed(1):'-'}</td><td>${totalL>0?totalL.toFixed(2):'-'}</td><td class="text-red">${totalF>0?formatMoney(totalF):'-'}</td><td class="text-red">${rc>0?formatMoney(rc):'-'}</td><td class="text-red">${oc>0?formatMoney(oc):'-'}</td><td class="text-red">${vf>0?formatMoney(vf):'-'}</td><td class="text-red"><b>${tc>0?formatMoney(tc):'-'}</b></td><td>${driven>0?(totalL/driven*100).toFixed(2):'-'}</td><td>${driven>0?(tc/driven).toFixed(3):'-'}</td></tr>`;
+                    });
+                });
+                html += '</tbody></table></div><p style="text-align:center;color:#999;font-size:12px;">左右滑动查看完整报表</p>';
+                document.getElementById('reportContent').innerHTML = html || '<div class="empty-state">暂无数据</div>';
+            }
+
+            // ===== 导出/导入 =====
+            window.exportAllData = async function() {
+                const d = await loadServerData();
+                if (d) {
+                    const blob = new Blob([JSON.stringify(d, null, 2)], {type:'application/json'});
+                    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = '车队核算云端备份.json'; a.click();
+                    showToast('备份已下�?);
+                }
+            };
+
+            window.exportReportCSV = function() {
+                const correction = parseFloat(document.getElementById('correctionFactor').value)||1.0;
+                let csv = '车辆,月份,月初里程,月末里程,行驶里程,油量(L),油费,维修保养,其他费用,违章罚款,总费�?百公里油�?每公里成本\n';
+                appData.vehicles.forEach(v => {
+                    const months = [...new Set([...appData.mileageRecords,...appData.fuelRecords,...appData.repairRecords,...appData.violationRecords].map(r=>r.month||(r.date?r.date.substring(0,7):null)).filter(Boolean))].sort();
+                    months.forEach(m => {
+                        const mr = appData.mileageRecords.find(r=>r.vehicleId===v.id&&r.month===m);
+                        const driven = mr ? (mr.endMileage-mr.startMileage) : 0;
+                        const fuels = appData.fuelRecords.filter(r=>r.vehicleId===v.id&&r.date?.startsWith(m));
+                        const totalL = fuels.reduce((s,r)=>s+r.liters,0);
+                        const totalF = fuels.reduce((s,r)=>s+r.amount,0);
+                        const repairs = appData.repairRecords.filter(r=>r.vehicleId===v.id&&r.date?.startsWith(m));
+                        const rc = repairs.filter(r=>r.expenseType==='维修'||r.expenseType==='保养').reduce((s,r)=>s+r.amount,0);
+                        const oc = repairs.filter(r=>r.expenseType!=='维修'&&r.expenseType!=='保养').reduce((s,r)=>s+r.amount,0);
+                        const viols = appData.violationRecords.filter(r=>r.vehicleId===v.id&&r.date?.startsWith(m));
+                        const vf = viols.reduce((s,r)=>s+r.fine,0);
+                        const tc = (totalF+rc+oc+vf)*correction;
+                        csv += v.plateNumber+','+m+','+(mr?mr.startMileage:'')+','+(mr?mr.endMileage:'')+','+(driven||'')+','+(totalL||'')+','+(totalF||'')+','+(rc||'')+','+(oc||'')+','+(vf||'')+','+tc.toFixed(2)+','+(driven>0?(totalL/driven*100).toFixed(2):'')+','+(driven>0?(tc/driven).toFixed(3):'')+'\n';
+                    });
+                });
+                const blob = new Blob(['\uFEFF'+csv], {type:'text/csv'});
+                const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = '单车核算报表.csv'; a.click();
+                showToast('报表已导�?);
+            };
+
+            window.importAllData = function(fileInput) {
+                const file = fileInput.files[0]; if (!file) return;
+                const reader = new FileReader();
+                reader.onload = async function(e) {
+                    try {
+                        const imported = JSON.parse(e.target.result);
+                        if (confirm('导入数据将覆盖当前内容，确认�?)) {
+                            // 批量导入到服务端
+                            for (const v of (imported.vehicles||[])) await apiPost('/api/vehicles', v);
+                            for (const r of (imported.mileageRecords||[])) await apiPost('/api/mileage_records', r);
+                            for (const r of (imported.fuelRecords||[])) await apiPost('/api/fuel_records', r);
+                            for (const r of (imported.repairRecords||[])) await apiPost('/api/repair_records', r);
+                            for (const r of (imported.violationRecords||[])) await apiPost('/api/violation_records', r);
+                            await loadDataFromServer();
+                            refreshAll();
+                            showToast('数据导入成功');
+                        }
+                    } catch(e) { showToast('文件格式错误'); }
+                };
+                reader.readAsText(file);
+                fileInput.value = '';
+            };
+
+            // ===== 页面切换 =====
+            function switchTab(pageName) {
+                document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+                document.querySelectorAll('.tab-item').forEach(t => t.classList.remove('active'));
+                const page = document.getElementById('page-'+pageName);
+                const tab = document.querySelector('.tab-item[data-page="'+pageName+'"]');
+                if (page) page.classList.add('active');
+                if (tab) tab.classList.add('active');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+                const renderMap = {
+                    'dashboard': renderDashboard,
+                    'mileage': renderMileagePage,
+                    'fuel': renderFuelPage,
+                    'repair': renderRepairPage,
+                    'violation': renderViolationPage,
+                    'report': renderReport
+                };
+                if (renderMap[pageName]) renderMap[pageName]();
+            }
+            window.switchTab = switchTab;
+            window.handleDelete = handleDelete;
+
+            // ===== 修复：tabBar点击事件绑定 =====
+            document.getElementById('tabBar').addEventListener('click', function(e) {
+                var tabItem = e.target.closest('.tab-item');
+                if (tabItem) switchTab(tabItem.getAttribute('data-page'));
+            });
+
+            // ===== 司机自助填报模式 =====
+        let isDriverMode = false;
+
+        window.toggleDriverMode = function() {
+            isDriverMode = !isDriverMode;
+            document.getElementById('headerRightBtn').textContent = isDriverMode ? '🔑 管理�? : '👤 司机';
+            if (isDriverMode) {
+                // 隐藏所有标准tab页面，显示司机填报页
+                document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+                document.querySelectorAll('.tab-item').forEach(t => t.classList.remove('active'));
+                document.getElementById('page-driver').classList.add('active');
+                renderDriverPage();
+            } else {
+                switchTab('dashboard');
+            }
+        };
+
+        window.renderDriverPage = function() {
+            const el = document.getElementById('driverSections');
+            const html = appData.vehicles.map(v => `
+                <div class="card driver-card" style="border-left:4px solid var(--primary);">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                        <div><strong style="font-size:16px;">${v.plateNumber}</strong> · ${v.brandModel||''}</div>
+                        <div style="font-size:12px;color:var(--text-lighter);">司机: ${v.driver||'未分�?}</div>
+                    </div>
+                    <div style="font-size:12px;color:var(--text-light);margin-bottom:10px;">${v.department||''}</div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">新增里程 (km)</label>
+                            <input class="form-input" type="number" id="drvMile_${v.id}" placeholder="本月行驶里程" step="0.1">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">加油�?(�?</label>
+                            <input class="form-input" type="number" id="drvFuelL_${v.id}" placeholder="�? step="0.01">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">油费 (�?</label>
+                            <input class="form-input" type="number" id="drvFuelA_${v.id}" placeholder="金额" step="0.01">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">维修费用 (�?</label>
+                            <input class="form-input" type="number" id="drvRepair_${v.id}" placeholder="金额" step="0.01">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">其它备注</label>
+                        <input class="form-input" id="drvNote_${v.id}" placeholder="如违章、保养等">
+                    </div>
+                    <button class="btn btn-primary btn-block btn-sm" style="margin-top:4px;" onclick="submitDriverData(${v.id})">📤 提交</button>
+                </div>
+            `).join('');
+            el.innerHTML = html || '<div class="empty-state">暂无车辆数据</div>';
+        };
+
+        window.submitDriverData = async function(vehicleId) {
+            const v = appData.vehicles.find(x => x.id === vehicleId);
+            if (!v) return;
+            const miles = parseFloat(document.getElementById('drvMile_'+vehicleId).value);
+            const fuelL = parseFloat(document.getElementById('drvFuelL_'+vehicleId).value);
+            const fuelA = parseFloat(document.getElementById('drvFuelA_'+vehicleId).value);
+            const repairA = parseFloat(document.getElementById('drvRepair_'+vehicleId).value);
+            const note = document.getElementById('drvNote_'+vehicleId).value.trim();
+            let count = 0;
+
+            const month = new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0');
+            const today = new Date().toISOString().split('T')[0];
+
+            if (miles > 0) {
+                // 获取最后一条里程记�?                const lastMr = appData.mileageRecords.filter(r => r.vehicleId === vehicleId).sort((a,b)=>b.month.localeCompare(a.month))[0];
+                var startM = lastMr ? lastMr.endMileage : v.currentMileage;
+                var endM = startM + miles;
+                await apiPost('/api/mileage_records', { vehicleId, month, startMileage:startM, endMileage:endM });
+                count++;
+            }
+            if (fuelL > 0 && fuelA > 0) {
+                await apiPost('/api/fuel_records', { vehicleId, date:today, liters:fuelL, amount:fuelA, note });
+                count++;
+            }
+            if (repairA > 0) {
+                await apiPost('/api/repair_records', { vehicleId, date:today, expenseType:'维修', amount:repairA, project:note||'司机填报', note });
+                count++;
+            }
+            if (note && fuelL <= 0 && fuelA <= 0 && repairA <= 0) {
+                await apiPost('/api/repair_records', { vehicleId, date:today, expenseType:'其他', amount:0, project:note, note });
+                count++;
+            }
+            if (count > 0) {
+                await loadDataFromServer();
+                // 清空输入
+                ['drvMile_','drvFuelL_','drvFuelA_','drvRepair_','drvNote_'].forEach(id => {
+                    var inp = document.getElementById(id+vehicleId);
+                    if (inp) inp.value = '';
+                });
+                showToast('�?已提�?'+count+' 条记�?);
+                addOperationLog(v.plateNumber, '司机填报', note||'提交�?+count+'条记�?, vehicleId);
+                await persist();
+            } else {
+                showToast('⚠️ 请至少填写一项数�?);
+            }
+        };
+            window.refreshAll = function() {
+                renderDashboard();
+                renderMileagePage();
+                renderFuelPage();
+                renderRepairPage();
+                renderViolationPage();
+                renderReport();
+                updateFilters();
+            };
+            window.refreshAll = window.refreshAll || function() { updateFilters(); renderDashboard(); renderMileagePage(); renderFuelPage(); renderRepairPage(); renderViolationPage(); renderReport(); };
+
+            // ===== 首页加载 =====
+            (async function init() {
+                await loadDataFromServer();
+                updateFilters();
+                renderDashboard();
+                renderMileagePage();
+                renderFuelPage();
+                renderRepairPage();
+                renderViolationPage();
+                renderReport();
+                switchTab('dashboard');
+                initSync();
+            })();
+        })();
+    </script>
+</body>
+</html>
